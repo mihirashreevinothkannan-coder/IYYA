@@ -1,37 +1,38 @@
-import { GoogleGenAI } from '@google/genai';
-
-// Initialize the Google Gen AI SDK
-// Note: In a production app, the AI call should be proxied through a backend
-// to avoid exposing the API key in the browser.
-let ai = null;
-
-try {
-  ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
-} catch (error) {
-  console.error("Failed to initialize GenAI", error);
-}
-
 const SYSTEM_PROMPT = `
 You are a caring, highly empathetic, and simple-to-understand virtual assistant for an elderly person.
 Your name is Iyya. 
-Keep your responses very short, clear, and easy to read. 
+Keep your responses very short, clear, and easy to read (max 2 sentences). 
 Do not use technical jargon. 
 Always be polite, patient, and warm. 
 If they ask you to perform an action (like calling someone or playing a video), say something confirming and helpful.
 `;
 
 export const getAiResponse = async (userMessage) => {
-  if (!ai) return "I'm having trouble connecting right now, dear. Let's try again later.";
-  
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+  if (!apiKey) return "I'm having trouble connecting right now, dear. Please set the API key.";
+
   try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: userMessage,
-      config: {
-        systemInstruction: SYSTEM_PROMPT,
-      }
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        system_instruction: {
+          parts: { text: SYSTEM_PROMPT }
+        },
+        contents: [
+          { parts: [{ text: userMessage }] }
+        ]
+      })
     });
-    return response.text;
+
+    const data = await response.json();
+    if (!response.ok) {
+        console.error("AI API Error:", data);
+        return "I'm having a little trouble connecting to my brain right now.";
+    }
+    return data.candidates[0].content.parts[0].text;
   } catch (error) {
     console.error("AI Error:", error);
     return "I'm sorry, I'm having a little trouble thinking right now. Please try again.";

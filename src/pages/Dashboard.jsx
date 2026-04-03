@@ -1,77 +1,129 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { Mic, MicOff, Youtube, MessageCircle, Play } from 'lucide-react';
+import { Mic, MicOff, Settings, Activity } from 'lucide-react';
+import { getAiResponse } from '../utils/ai';
 
 export default function Dashboard() {
   const [userName, setUserName] = useState('Friend');
   const [isListening, setIsListening] = useState(false);
-  const [feedbackText, setFeedbackText] = useState("Tap the microphone to speak");
+  const [feedbackText, setFeedbackText] = useState("Tap to speak");
+  const recognitionRef = useRef(null);
+  const synthRef = useRef(window.speechSynthesis);
 
   useEffect(() => {
     const name = localStorage.getItem('userName');
     if (name) setUserName(name);
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.lang = 'en-US';
+
+      recognition.onstart = () => {
+        setIsListening(true);
+        setFeedbackText("Listening globally...");
+      };
+
+      recognition.onresult = async (event) => {
+        setIsListening(false);
+        const transcript = event.results[0][0].transcript;
+        setFeedbackText(`Analyzing: "${transcript}"`);
+        
+        try {
+          const aiText = await getAiResponse(transcript);
+          setFeedbackText(aiText);
+          speak(aiText);
+        } catch (error) {
+          console.error(error);
+          setFeedbackText("Neural link disrupted. Try again.");
+        }
+      };
+
+      recognition.onerror = (event) => {
+        setIsListening(false);
+        setFeedbackText("Signal lost.");
+      };
+
+      recognition.onend = () => setIsListening(false);
+      recognitionRef.current = recognition;
+    } else {
+      setFeedbackText("Browser incompatible with Voice Engine.");
+    }
   }, []);
 
+  const speak = (text) => {
+    if (!synthRef.current) return;
+    synthRef.current.cancel(); 
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'en-US';
+    utterance.rate = 1.0; 
+    utterance.pitch = 1.1; 
+    synthRef.current.speak(utterance);
+  };
+
   const toggleListen = () => {
-    if (!isListening) {
-      setIsListening(true);
-      setFeedbackText("Listening... (e.g. 'Call Mary' or 'Play Music')");
-      
-      // Mock listening timeout
-      setTimeout(() => {
-        setIsListening(false);
-        setFeedbackText("I'm sorry, I didn't catch that. Please try again.");
-      }, 5000);
-    } else {
+    if (!recognitionRef.current) return;
+    if (isListening) {
+      recognitionRef.current.stop();
       setIsListening(false);
-      setFeedbackText("Tap the microphone to speak");
+    } else {
+      synthRef.current?.cancel(); 
+      try { recognitionRef.current.start(); } catch(e) {}
     }
   };
 
   return (
-    <div className="flex flex-col h-full pt-12 pb-6">
-      <header className="mb-10 text-center">
-        <h1 className="text-4xl font-bold text-slate-800 mb-2">Hello, {userName}!</h1>
-        <p className="text-xl text-slate-600 font-medium">How can I help you today?</p>
+    <motion.div 
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.95 }}
+      className="flex flex-col h-full pt-16 pb-32"
+    >
+      <header className="mb-12 text-center px-4 flex-none">
+        <h1 className="text-4xl font-extrabold text-white mb-2 tracking-tight">Iyya <span className="text-blue-500">Core</span></h1>
+        <p className="text-lg text-slate-400 font-medium">Welcome back, {userName}.</p>
       </header>
       
-      <div className="flex-1 flex flex-col items-center justify-center">
-        {/* Central glowing microphone */}
-        <div className="relative mb-8">
+      <div className="flex-1 flex flex-col items-center justify-center -mt-8">
+        
+        <div className="relative mb-12">
+          {/* Advanced Glow Animations */}
           {isListening && (
-            <motion.div 
-              animate={{ scale: [1, 1.5, 1], opacity: [0.5, 0, 0.5] }}
-              transition={{ repeat: Infinity, duration: 1.5 }}
-              className="absolute inset-0 bg-blue-400 rounded-full blur-xl"
-            />
+            <>
+              <motion.div 
+                animate={{ scale: [1, 1.8, 1], opacity: [0.3, 0, 0.3] }}
+                transition={{ repeat: Infinity, duration: 1.5, ease: "easeInOut" }}
+                className="absolute inset-0 bg-blue-500 rounded-full blur-2xl pointer-events-none"
+              />
+              <motion.div 
+                animate={{ scale: [1, 1.4, 1], opacity: [0.6, 0.1, 0.6] }}
+                transition={{ repeat: Infinity, duration: 1.2, ease: "easeInOut", delay: 0.2 }}
+                className="absolute inset-0 bg-indigo-500 rounded-full blur-xl pointer-events-none"
+              />
+            </>
           )}
+          
+          {/* Main Button */}
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={toggleListen}
-            className={`relative z-10 w-32 h-32 rounded-full flex items-center justify-center text-white shadow-2xl transition-colors ${
-              isListening ? 'bg-red-500' : 'bg-blue-500'
+            className={`relative z-10 w-40 h-40 rounded-full flex items-center justify-center text-white shadow-2xl transition-all duration-500 ${
+              isListening ? 'bg-gradient-to-tr from-blue-600 to-indigo-500 shadow-blue-500/50' : 'bg-white/5 border border-white/10 hover:bg-white/10'
             }`}
           >
-            {isListening ? <MicOff size={64} /> : <Mic size={64} />}
+            {isListening ? <Activity size={64} className="animate-pulse" /> : <Mic size={64} className="text-slate-300" />}
           </motion.button>
         </div>
         
-        <p className="text-xl font-medium text-slate-700 h-16 text-center max-w-xs transition-all">
-          {feedbackText}
-        </p>
+        <div className="bg-white/5 border border-white/10 backdrop-blur-md rounded-2xl p-6 text-center max-w-sm w-full mx-4 shadow-xl">
+           <p className={`text-lg font-medium transition-all ${isListening ? 'text-blue-400' : 'text-slate-300'}`}>
+            {feedbackText}
+          </p>
+        </div>
       </div>
-
-      <div className="mt-auto grid grid-cols-2 gap-4">
-        <button className="flex flex-col items-center justify-center bg-white p-4 rounded-2xl shadow-md active:bg-slate-50 transition-colors">
-          <Youtube className="text-red-500 mb-2" size={36} />
-          <span className="text-lg font-semibold">Watch Video</span>
-        </button>
-        <button className="flex flex-col items-center justify-center bg-white p-4 rounded-2xl shadow-md active:bg-slate-50 transition-colors">
-          <MessageCircle className="text-green-500 mb-2" size={36} />
-          <span className="text-lg font-semibold">WhatsApp</span>
-        </button>
-      </div>
-    </div>
+    </motion.div>
   );
 }
